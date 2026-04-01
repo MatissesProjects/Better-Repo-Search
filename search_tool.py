@@ -51,11 +51,21 @@ def search_repository(regex_pattern: str, file_extension: str = "", context_line
     command.extend([regex_pattern, target_directory])
     
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
-        if result.stdout:
-            output = result.stdout
-            return output[:10000] + ("\n... [Truncated]" if len(output) > 10000 else "")
-        return f"No matches found for: {regex_pattern}"
+        # We run the command and handle the output decoding manually to be more robust
+        result = subprocess.run(command, capture_output=True, check=False)
+        
+        # Decode with utf-8 and replacement for invalid characters
+        stdout = result.stdout.decode('utf-8', errors='replace')
+        stderr = result.stderr.decode('utf-8', errors='replace')
+        
+        if stdout:
+            return stdout[:10000] + ("\n... [Truncated]" if len(stdout) > 10000 else "")
+        elif stderr:
+            if result.returncode == 1 and not stderr:
+                 return f"No matches found for: {regex_pattern}"
+            return f"Error: {stderr}"
+        else:
+            return f"No matches found for: {regex_pattern}"
     except Exception as e:
         return f"Error: {str(e)}"
 
