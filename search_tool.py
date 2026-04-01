@@ -16,6 +16,8 @@ try:
     import tree_sitter_javascript as tsjavascript
     import tree_sitter_typescript as tstypescript
     import tree_sitter_html as tshtml
+    import tree_sitter_java as tsjava
+    import tree_sitter_kotlin as tskotlin
     
     LANGUAGES = {
         'py': Language(tspython.language()),
@@ -23,7 +25,10 @@ try:
         'js': Language(tsjavascript.language()),
         'ts': Language(tstypescript.language_typescript()),
         'tsx': Language(tstypescript.language_tsx()),
-        'html': Language(tshtml.language())
+        'html': Language(tshtml.language()),
+        'java': Language(tsjava.language()),
+        'kt': Language(tskotlin.language()),
+        'kts': Language(tskotlin.language())
     }
     HAS_TREE_SITTER = True
 except ImportError:
@@ -97,12 +102,17 @@ def get_file_symbols(file_path: str) -> str:
             (r'^\s*class\s+([a-zA-Z_]\w*)\s*\{', 'Class (C#/Java)'),
             (r'^\s*(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_]\w*)\s*\(', 'Function (JS/TS)'),
             (r'^\s*class\s+([a-zA-Z_]\w*)\s*', 'Class (JS/TS)'),
+            (r'^\s*(?:(?:public|private|protected|internal|static|abstract|open|override|actual|expect)\s+)*fun\s+([a-zA-Z_]\w*)\s*\(', 'Function (Kotlin)'),
+            (r'^\s*(?:(?:public|private|protected|internal|abstract|open|sealed|data|enum)\s+)*class\s+([a-zA-Z_]\w*)', 'Class (Kotlin)')
         ]
         for i, line in enumerate(content.splitlines()):
             for pat, stype in patterns:
                 m = re.search(pat, line)
                 if m:
-                    name = m.group(2) if stype == 'Method (C#/Java)' else m.group(1)
+                    if stype == 'Method (C#/Java)':
+                        name = m.group(2)
+                    else:
+                        name = m.group(1)
                     symbols.append(f"L{i+1}: [{stype}] {name}")
                     break
         return "\n".join(symbols) if symbols else "No symbols found."
@@ -145,6 +155,18 @@ def get_symbol_definition(file_path: str, symbol_name: str) -> str:
         elif ext == 'html':
             query_str = f"""
             (start_tag name: (tag_name) @name (#eq? @name "{symbol_name}"))
+            """
+        elif ext == 'java':
+            query_str = f"""
+            (method_declaration name: (identifier) @name (#eq? @name "{symbol_name}"))
+            (class_declaration name: (identifier) @name (#eq? @name "{symbol_name}"))
+            (interface_declaration name: (identifier) @name (#eq? @name "{symbol_name}"))
+            """
+        elif ext in ['kt', 'kts']:
+            query_str = f"""
+            (function_declaration identifier: (simple_identifier) @name (#eq? @name "{symbol_name}"))
+            (class_declaration identifier: (simple_identifier) @name (#eq? @name "{symbol_name}"))
+            (object_declaration identifier: (simple_identifier) @name (#eq? @name "{symbol_name}"))
             """
             
         query = lang.query(query_str)
@@ -197,6 +219,18 @@ def extract_code_block(file_path: str, symbol_name: str) -> str:
             query_str = f"""
             (element (start_tag name: (tag_name) @name (#eq? @name "{symbol_name}"))) @block
             """
+        elif ext == 'java':
+            query_str = f"""
+            (method_declaration name: (identifier) @name (#eq? @name "{symbol_name}")) @block
+            (class_declaration name: (identifier) @name (#eq? @name "{symbol_name}")) @block
+            (interface_declaration name: (identifier) @name (#eq? @name "{symbol_name}")) @block
+            """
+        elif ext in ['kt', 'kts']:
+            query_str = f"""
+            (function_declaration identifier: (simple_identifier) @name (#eq? @name "{symbol_name}")) @block
+            (class_declaration identifier: (simple_identifier) @name (#eq? @name "{symbol_name}")) @block
+            (object_declaration identifier: (simple_identifier) @name (#eq? @name "{symbol_name}")) @block
+            """
             
         query = lang.query(query_str)
         matches = query.matches(tree.root_node)
@@ -243,6 +277,10 @@ def analyze_dependencies(file_path: str) -> str:
             (element (start_tag name: (tag_name) @name (#eq? @name "script"))) @imp
             (element (start_tag name: (tag_name) @name (#eq? @name "link"))) @imp
             """
+        elif ext == 'java':
+            query_str = "(import_declaration) @imp"
+        elif ext in ['kt', 'kts']:
+            query_str = "(import_header) @imp"
             
         query = lang.query(query_str)
         matches = query.matches(tree.root_node)
@@ -323,7 +361,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'get_symbol_definition',
-            'description': 'Semantic search: find exact declaration of class/method (Supports py, cs, js, ts, html tags).',
+            'description': 'Semantic search: find exact declaration of class/method (Supports py, cs, js, ts, html, java, kt).',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -338,7 +376,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'extract_code_block',
-            'description': 'Semantic search: get the full code body for a symbol (Supports py, cs, js, ts, html tags).',
+            'description': 'Semantic search: get the full code body for a symbol (Supports py, cs, js, ts, html, java, kt).',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -353,7 +391,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'analyze_dependencies',
-            'description': 'Extract all imports/directives from a file (Supports py, cs, js, ts, html tags).',
+            'description': 'Extract all imports/directives from a file (Supports py, cs, js, ts, html, java, kt).',
             'parameters': {
                 'type': 'object',
                 'properties': {
