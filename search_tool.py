@@ -419,13 +419,13 @@ def run_chat(prompt: str, model_name: str):
     client = ollama.Client(timeout=300.0)
     
     messages = [
-        {'role': 'system', 'content': 'You are an expert software engineer. Explore the codebase using tools. Call tools explicitly.'},
+        {'role': 'system', 'content': 'You are an expert software engineer. Explore the codebase using tools. USE SEMANTIC TOOLS (tree-sitter) like get_symbol_definition and extract_code_block when you find relevant classes or methods to understand their implementation deeply. Truncate long files and focus on semantic structure.'},
         {'role': 'user', 'content': prompt}
     ]
     
     print(f"--- Asking Local Model ({model_name}) ---")
     
-    max_turns = 10
+    max_turns = 15
     for turn in range(max_turns):
         print(f"\n[Turn {turn+1}] Generating...", flush=True)
         
@@ -463,10 +463,7 @@ def run_chat(prompt: str, model_name: str):
                     last_chunk_type = 'content'
                     
                 if m.get('tool_calls'):
-                    # Accumulate unique tool calls
-                    for tc in m['tool_calls']:
-                        if tc not in full_msg['tool_calls']:
-                            full_msg['tool_calls'].append(tc)
+                    full_msg['tool_calls'] = m['tool_calls']
 
             print("\n")
             messages.append(full_msg)
@@ -491,12 +488,18 @@ def run_chat(prompt: str, model_name: str):
                 if name in available_functions:
                     try:
                         result = available_functions[name](**args)
+                        # Print a snippet of the result
+                        res_preview = str(result)[:200] + "..." if len(str(result)) > 200 else str(result)
+                        print(f"--- Result Snippet: {res_preview}")
+                        
                         # Sanitize XML characters that can break the Ollama internal parser
                         sanitized_result = str(result).replace('<', '&lt;').replace('>', '&gt;')
                         messages.append({'role': 'tool', 'content': sanitized_result, 'name': name})
                     except Exception as te:
+                        print(f"--- Error: {str(te)}")
                         messages.append({'role': 'tool', 'content': f"Error: {str(te)}", 'name': name})
                 else:
+                    print(f"--- Error: Tool {name} not found.")
                     messages.append({'role': 'tool', 'content': f"Error: Tool {name} not found.", 'name': name})
                     
         except ollama.ResponseError as re:
