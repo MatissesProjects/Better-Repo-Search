@@ -13,10 +13,17 @@ try:
     from tree_sitter import Language, Parser
     import tree_sitter_python as tspython
     import tree_sitter_c_sharp as tscsharp
+    import tree_sitter_javascript as tsjavascript
+    import tree_sitter_typescript as tstypescript
+    import tree_sitter_html as tshtml
     
     LANGUAGES = {
         'py': Language(tspython.language()),
-        'cs': Language(tscsharp.language())
+        'cs': Language(tscsharp.language()),
+        'js': Language(tsjavascript.language()),
+        'ts': Language(tstypescript.language_typescript()),
+        'tsx': Language(tstypescript.language_tsx()),
+        'html': Language(tshtml.language())
     }
     HAS_TREE_SITTER = True
 except ImportError:
@@ -77,7 +84,7 @@ def list_directory_tree(path: str = ".", depth: int = 2) -> str:
     return "\n".join(output)
 
 def get_file_symbols(file_path: str) -> str:
-    r"""Extracts symbols from a file."""
+    r"""Extracts symbols from a file using basic regex."""
     try:
         if not os.path.exists(file_path): return "Error: File not found"
         with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
@@ -88,6 +95,8 @@ def get_file_symbols(file_path: str) -> str:
             (r'^\s*class\s+([a-zA-Z_]\w*)\s*[:\(]', 'Class (Py)'),
             (r'^\s*(?:(?:public|private|protected|static|async)\s+)+([\w<>\[\]]+)\s+([a-zA-Z_]\w*)\s*\(', 'Method (C#/Java)'),
             (r'^\s*class\s+([a-zA-Z_]\w*)\s*\{', 'Class (C#/Java)'),
+            (r'^\s*(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_]\w*)\s*\(', 'Function (JS/TS)'),
+            (r'^\s*class\s+([a-zA-Z_]\w*)\s*', 'Class (JS/TS)'),
         ]
         for i, line in enumerate(content.splitlines()):
             for pat, stype in patterns:
@@ -116,7 +125,6 @@ def get_symbol_definition(file_path: str, symbol_name: str) -> str:
             source = f.read()
         tree = parser.parse(source)
         
-        # Language-specific queries
         if ext == 'py':
             query_str = f"""
             (function_definition name: (identifier) @name (#eq? @name "{symbol_name}"))
@@ -126,6 +134,17 @@ def get_symbol_definition(file_path: str, symbol_name: str) -> str:
             query_str = f"""
             (method_declaration name: (identifier) @name (#eq? @name "{symbol_name}"))
             (class_declaration name: (identifier) @name (#eq? @name "{symbol_name}"))
+            """
+        elif ext in ['js', 'ts', 'tsx']:
+            query_str = f"""
+            (function_declaration name: (identifier) @name (#eq? @name "{symbol_name}"))
+            (class_declaration name: (identifier) @name (#eq? @name "{symbol_name}"))
+            (method_definition name: (property_identifier) @name (#eq? @name "{symbol_name}"))
+            (variable_declarator name: (identifier) @name (#eq? @name "{symbol_name}"))
+            """
+        elif ext == 'html':
+            query_str = f"""
+            (start_tag name: (tag_name) @name (#eq? @name "{symbol_name}"))
             """
             
         query = lang.query(query_str)
@@ -167,6 +186,17 @@ def extract_code_block(file_path: str, symbol_name: str) -> str:
             (method_declaration name: (identifier) @name (#eq? @name "{symbol_name}")) @block
             (class_declaration name: (identifier) @name (#eq? @name "{symbol_name}")) @block
             """
+        elif ext in ['js', 'ts', 'tsx']:
+            query_str = f"""
+            (function_declaration name: (identifier) @name (#eq? @name "{symbol_name}")) @block
+            (class_declaration name: (identifier) @name (#eq? @name "{symbol_name}")) @block
+            (method_definition name: (property_identifier) @name (#eq? @name "{symbol_name}")) @block
+            (variable_declarator name: (identifier) @name (#eq? @name "{symbol_name}")) @block
+            """
+        elif ext == 'html':
+            query_str = f"""
+            (element (start_tag name: (tag_name) @name (#eq? @name "{symbol_name}"))) @block
+            """
             
         query = lang.query(query_str)
         matches = query.matches(tree.root_node)
@@ -202,6 +232,17 @@ def analyze_dependencies(file_path: str) -> str:
             """
         elif ext == 'cs':
             query_str = "(using_directive) @imp"
+        elif ext in ['js', 'ts', 'tsx']:
+            query_str = """
+            (import_statement) @imp
+            (export_statement) @imp
+            (call_expression function: (identifier) @name (#eq? @name "require")) @imp
+            """
+        elif ext == 'html':
+            query_str = """
+            (element (start_tag name: (tag_name) @name (#eq? @name "script"))) @imp
+            (element (start_tag name: (tag_name) @name (#eq? @name "link"))) @imp
+            """
             
         query = lang.query(query_str)
         matches = query.matches(tree.root_node)
@@ -282,7 +323,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'get_symbol_definition',
-            'description': 'Semantic search: find exact declaration of class/method.',
+            'description': 'Semantic search: find exact declaration of class/method (Supports py, cs, js, ts, html tags).',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -297,7 +338,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'extract_code_block',
-            'description': 'Semantic search: get the full code body for a symbol.',
+            'description': 'Semantic search: get the full code body for a symbol (Supports py, cs, js, ts, html tags).',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -312,7 +353,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'analyze_dependencies',
-            'description': 'Extract all imports/directives from a file.',
+            'description': 'Extract all imports/directives from a file (Supports py, cs, js, ts, html tags).',
             'parameters': {
                 'type': 'object',
                 'properties': {
