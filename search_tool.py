@@ -161,81 +161,86 @@ available_functions = {
 
 def run_chat(prompt: str, model: str):
     messages = [
-        {'role': 'system', 'content': 'You are a helpful coding assistant. Use the provided tools to explore the codebase. Respond only with the final answer after tools are called.'},
+        {'role': 'system', 'content': 'You are a helpful coding assistant. Use tools to explore the codebase. Respond with a final answer after tools are called.'},
         {'role': 'user', 'content': prompt}
     ]
     
     print(f"--- Asking Local Model ({model}) ---")
     
-    try:
-        # First request with tools - using stream to see thinking
+    max_turns = 10
+    for turn in range(max_turns):
+        print(f"\n[Turn {turn+1}] Generating...", flush=True)
+        
         stream = ollama.chat(model=model, messages=messages, tools=tools, stream=True)
         
         full_message = {'role': 'assistant', 'content': '', 'thinking': '', 'tool_calls': []}
         
-        print("\nThinking...", end="", flush=True)
-        last_chunk_type = None
-        
         for chunk in stream:
             msg = chunk.get('message', {})
             
-            # Print thinking if present
             if 'thinking' in msg and msg['thinking']:
-                if last_chunk_type != 'thinking':
-                    print("\n[Thinking]: ", end="", flush=True)
                 print(msg['thinking'], end="", flush=True)
                 full_message['thinking'] += msg['thinking']
-                last_chunk_type = 'thinking'
             
-            # Print content if present (though usually tool calls come without content)
             if 'content' in msg and msg['content']:
-                if last_chunk_type != 'content':
-                    print("\n[Content]: ", end="", flush=True)
                 print(msg['content'], end="", flush=True)
                 full_message['content'] += msg['content']
-                last_chunk_type = 'content'
                 
-            # Accumulate tool calls
             if 'tool_calls' in msg and msg['tool_calls']:
+                # Streaming tool calls need to be handled carefully. 
+                # We extend the list and will de-duplicate later.
                 full_message['tool_calls'].extend(msg['tool_calls'])
-        
+
         print("\n")
         messages.append(full_message)
         
         if full_message['tool_calls']:
-            for tool in full_message['tool_calls']:
+            # De-duplicate tool calls by func name and args (crude but effective for local streams)
+            unique_calls = []
+            seen_calls = set()
+            for t in full_message['tool_calls']:
+                call_sig = f"{t['function']['name']}:{json.dumps(t['function']['arguments'], sort_keys=True)}"
+                if call_sig not in seen_calls:
+                    unique_calls.append(t)
+                    seen_calls.add(call_sig)
+            
+            for tool in unique_calls:
                 name = tool['function']['name']
                 args = tool['function']['arguments']
-                print(f"--- Tool Call: {name}({args}) ---")
+                print(f"--- Executing: {name}({args}) ---")
                 
+                # Type conversion
                 for k in ['start_line', 'end_line', 'context_lines', 'depth']:
-                    if k in args and isinstance(args[k], (str, float)): args[k] = int(args[k])
+                    if k in args and isinstance(args[k], (str, float)):
+                        try: args[k] = int(args[k])
+                        except: pass
                 
-                result = available_functions[name](**args)
-                sanitized_result = str(result).replace('<', '&lt;').replace('>', '&gt;')
-                
-                messages.append({'role': 'tool', 'content': sanitized_result, 'name': name})
-
-            print("--- Generating Final Response ---")
-            final_stream = ollama.chat(model=model, messages=messages, stream=True)
-            
-            final_content = ""
-            for chunk in final_stream:
-                msg = chunk.get('message', {})
-                if 'thinking' in msg and msg['thinking']:
-                    print(msg['thinking'], end="", flush=True)
-                if 'content' in msg and msg['content']:
-                    print(msg['content'], end="", flush=True)
-                    final_content += msg['content']
-            print("\n")
+                if name in available_functions:
+                    try:
+                        result = available_functions[name](**args)
+                    except Exception as e:
+                        result = f"Error: {str(e)}"
+                    
+                    sanitized_result = str(result).replace('<', '&lt;').replace('>', '&gt;')
+                    
+                    messages.append({
+                        'role': 'tool',
+                        'content': sanitized_result,
+                        'name': name
+                    })
+                else:
+                    messages.append({
+                        'role': 'tool',
+                        'content': f"Error: Tool {name} not found.",
+                        'name': name
+                    })
         else:
+            # No tool calls, we are finished
             if not full_message['content'] and not full_message['thinking']:
-                print("No response from model.")
-                
-    except Exception as e:
-        print(f"\nError: {str(e)}")
-        import traceback
-        traceback.print_exc()
+                print("(No response content produced)")
+            break
+
+    print("\n--- Interaction Complete ---")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
