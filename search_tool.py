@@ -423,13 +423,26 @@ available_functions = {
     'analyze_dependencies': analyze_dependencies,
 }
 
+class CallHistory:
+    def __init__(self):
+        self.history = set()
+
+    def is_duplicate(self, name, args):
+        # Create a stable string representation of the call
+        call_str = f"{name}:{json.dumps(args, sort_keys=True)}"
+        if call_str in self.history:
+            return True
+        self.history.add(call_str)
+        return False
+
 # --- Orchestration ---
 
 def run_chat(prompt: str, model_name: str):
     client = ollama.Client(timeout=300.0)
+    call_history = CallHistory()
     
     messages = [
-        {'role': 'system', 'content': 'You are an expert software engineer. Explore the codebase using tools. USE SEMANTIC TOOLS (tree-sitter) like get_symbol_definition and extract_code_block when you find relevant classes or methods to understand their implementation deeply. Truncate long files and focus on semantic structure.'},
+        {'role': 'system', 'content': 'You are an expert software engineer. Explore the codebase using tools. IMPORTANT: If you find a file via regex search, use extract_code_block or read_file to see the content. DO NOT repeat the same search multiple times if it returns the same results. Use semantic tools (tree-sitter) for deep analysis.'},
         {'role': 'user', 'content': prompt}
     ]
     
@@ -487,6 +500,17 @@ def run_chat(prompt: str, model_name: str):
             for tool in full_msg['tool_calls']:
                 name = tool['function']['name']
                 args = tool['function']['arguments']
+                
+                # Check for duplicate calls to prevent infinite loops
+                if call_history.is_duplicate(name, args):
+                    print(f"--- Skipping duplicate call: {name}({args}) ---")
+                    messages.append({
+                        'role': 'tool', 
+                        'content': "Error: This exact tool call was already made. Please try a different approach or analyze the previous results.", 
+                        'name': name
+                    })
+                    continue
+
                 print(f"--- Executing: {name}({args}) ---")
                 
                 # Cleanup arg types
