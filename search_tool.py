@@ -437,7 +437,7 @@ class CallHistory:
 
 # --- Orchestration ---
 
-def run_chat(prompt: str, model_name: str):
+def run_chat(prompt: str, model_name: str, verbose: bool = False):
     client = ollama.Client(timeout=300.0)
     call_history = CallHistory()
     
@@ -446,11 +446,13 @@ def run_chat(prompt: str, model_name: str):
         {'role': 'user', 'content': prompt}
     ]
     
-    print(f"--- Asking Local Model ({model_name}) ---")
+    if verbose:
+        print(f"--- Asking Local Model ({model_name}) ---")
     
     max_turns = 15
     for turn in range(max_turns):
-        print(f"\n[Turn {turn+1}] Generating...", flush=True)
+        if verbose:
+            print(f"\n[Turn {turn+1}] Generating...", flush=True)
         
         try:
             full_msg = {'role': 'assistant', 'content': '', 'thinking': '', 'tool_calls': []}
@@ -472,15 +474,17 @@ def run_chat(prompt: str, model_name: str):
                 m = chunk.get('message', {})
                 
                 if m.get('thinking'):
-                    if last_chunk_type != 'thinking':
-                        print("\n[Thinking]: ", end="", flush=True)
-                    print(m['thinking'], end="", flush=True)
+                    if verbose:
+                        if last_chunk_type != 'thinking':
+                            print("\n[Thinking]: ", end="", flush=True)
+                        print(m['thinking'], end="", flush=True)
                     full_msg['thinking'] += m['thinking']
                     last_chunk_type = 'thinking'
                 
                 if m.get('content'):
-                    if last_chunk_type != 'content':
-                        print("\n[Content]: ", end="", flush=True)
+                    if verbose:
+                        if last_chunk_type != 'content':
+                            print("\n[Content]: ", end="", flush=True)
                     print(m['content'], end="", flush=True)
                     full_msg['content'] += m['content']
                     last_chunk_type = 'content'
@@ -488,12 +492,14 @@ def run_chat(prompt: str, model_name: str):
                 if m.get('tool_calls'):
                     full_msg['tool_calls'] = m['tool_calls']
 
-            print("\n")
+            if verbose:
+                print("\n")
             messages.append(full_msg)
             
             if not full_msg.get('tool_calls'):
                 if not full_msg.get('content') and not full_msg.get('thinking'):
-                    print("(Empty response from model)")
+                    if verbose:
+                        print("(Empty response from model)")
                 break
                 
             # Execute tool calls
@@ -503,7 +509,8 @@ def run_chat(prompt: str, model_name: str):
                 
                 # Check for duplicate calls to prevent infinite loops
                 if call_history.is_duplicate(name, args):
-                    print(f"--- Skipping duplicate call: {name}({args}) ---")
+                    if verbose:
+                        print(f"--- Skipping duplicate call: {name}({args}) ---")
                     messages.append({
                         'role': 'tool', 
                         'content': "Error: This exact tool call was already made. Please try a different approach or analyze the previous results.", 
@@ -511,7 +518,8 @@ def run_chat(prompt: str, model_name: str):
                     })
                     continue
 
-                print(f"--- Executing: {name}({args}) ---")
+                if verbose:
+                    print(f"--- Executing: {name}({args}) ---")
                 
                 # Cleanup arg types
                 for k in ['start_line', 'end_line', 'context_lines', 'depth']:
@@ -523,17 +531,20 @@ def run_chat(prompt: str, model_name: str):
                     try:
                         result = available_functions[name](**args)
                         # Print a snippet of the result
-                        res_preview = str(result)[:200] + "..." if len(str(result)) > 200 else str(result)
-                        print(f"--- Result Snippet: {res_preview}")
+                        if verbose:
+                            res_preview = str(result)[:200] + "..." if len(str(result)) > 200 else str(result)
+                            print(f"--- Result Snippet: {res_preview}")
                         
                         # Sanitize XML characters that can break the Ollama internal parser
                         sanitized_result = str(result).replace('<', '&lt;').replace('>', '&gt;')
                         messages.append({'role': 'tool', 'content': sanitized_result, 'name': name})
                     except Exception as te:
-                        print(f"--- Error: {str(te)}")
+                        if verbose:
+                            print(f"--- Error: {str(te)}")
                         messages.append({'role': 'tool', 'content': f"Error: {str(te)}", 'name': name})
                 else:
-                    print(f"--- Error: Tool {name} not found.")
+                    if verbose:
+                        print(f"--- Error: Tool {name} not found.")
                     messages.append({'role': 'tool', 'content': f"Error: Tool {name} not found.", 'name': name})
                     
         except ollama.ResponseError as re:
@@ -543,21 +554,24 @@ def run_chat(prompt: str, model_name: str):
             print(f"\n[Unexpected Error]: {str(e)}")
             break
     
-    print("\n--- Interaction Complete ---")
+    if verbose:
+        print("\n--- Interaction Complete ---")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("prompt", help="The prompt to send to the model.")
     parser.add_argument("--model", default="qwen3.5:9b", help="The Ollama model to use.")
     parser.add_argument("--repo", default=".", help="The path to the repository to search (default: current directory).")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show streamed thinking and detailed logs.")
     args = parser.parse_args()
     
     if args.repo != ".":
         if os.path.exists(args.repo):
-            print(f"--- Changing working directory to: {args.repo} ---")
+            if args.verbose:
+                print(f"--- Changing working directory to: {args.repo} ---")
             os.chdir(args.repo)
         else:
             print(f"Error: Repo path '{args.repo}' does not exist.")
             sys.exit(1)
             
-    run_chat(args.prompt, args.model)
+    run_chat(args.prompt, args.model, args.verbose)
