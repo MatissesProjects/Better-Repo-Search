@@ -304,6 +304,61 @@ def analyze_dependencies(file_path: str) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
+def get_symbol_references(file_path: str, symbol_name: str) -> str:
+    r"""Uses Tree-sitter to find all references (call sites) of a symbol."""
+    if not HAS_TREE_SITTER: return "Error: Tree-sitter not installed."
+    
+    ext = file_path.split('.')[-1]
+    if ext not in LANGUAGES: return f"Error: Language .{ext} not supported for semantic search."
+    
+    lang = LANGUAGES[ext]
+    parser = Parser(lang)
+    
+    try:
+        with open(file_path, 'rb') as f:
+            source = f.read()
+        tree = parser.parse(source)
+        
+        if ext == 'py':
+            query_str = f"""
+            (call function: (identifier) @name (#eq? @name "{symbol_name}"))
+            (call function: (attribute attribute: (identifier) @name (#eq? @name "{symbol_name}")))
+            """
+        elif ext == 'cs':
+            query_str = f"""
+            (invocation_expression function: (identifier) @name (#eq? @name "{symbol_name}"))
+            (invocation_expression function: (member_access_expression name: (identifier) @name (#eq? @name "{symbol_name}")))
+            """
+        elif ext in ['js', 'ts', 'tsx']:
+            query_str = f"""
+            (call_expression function: (identifier) @name (#eq? @name "{symbol_name}"))
+            (call_expression function: (member_expression property: (property_identifier) @name (#eq? @name "{symbol_name}")))
+            """
+        elif ext == 'java':
+            query_str = f"""
+            (method_invocation name: (identifier) @name (#eq? @name "{symbol_name}"))
+            """
+        elif ext in ['kt', 'kts']:
+            query_str = f"""
+            (call_expression navigation_suffix: (navigation_suffix (simple_identifier) @name (#eq? @name "{symbol_name}")))
+            (call_expression (simple_identifier) @name (#eq? @name "{symbol_name}"))
+            """
+        else:
+            return f"Error: get_symbol_references not fully implemented for {ext} yet."
+            
+        query = lang.query(query_str)
+        matches = query.matches(tree.root_node)
+        
+        results = []
+        for match in matches:
+            for node, capture_name in match.captures:
+                start_row, _ = node.start_point
+                results.append(f"Found {symbol_name} reference at L{start_row+1}")
+                
+        return "\n".join(results) if results else f"No semantic references found for '{symbol_name}' in this file."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
 # --- Definitions ---
 
 tools = [
@@ -385,6 +440,21 @@ tools = [
     {
         'type': 'function',
         'function': {
+            'name': 'get_symbol_references',
+            'description': 'Semantic search: find all call sites/references of a symbol in a file (Supports py, cs, js, ts, java, kt).',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'file_path': {'type': 'string'},
+                    'symbol_name': {'type': 'string'},
+                },
+                'required': ['file_path', 'symbol_name'],
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
             'name': 'extract_code_block',
             'description': 'Semantic search: get the full code body for a symbol (Supports py, cs, js, ts, html, java, kt).',
             'parameters': {
@@ -419,6 +489,7 @@ available_functions = {
     'list_directory_tree': list_directory_tree,
     'get_file_symbols': get_file_symbols,
     'get_symbol_definition': get_symbol_definition,
+    'get_symbol_references': get_symbol_references,
     'extract_code_block': extract_code_block,
     'analyze_dependencies': analyze_dependencies,
 }
@@ -437,12 +508,48 @@ class CallHistory:
 
 # --- Orchestration ---
 
+def check_ollama():
+    """Checks if the Ollama service is running and accessible."""
+    try:
+        client = ollama.Client(timeout=5.0)
+        client.list()
+        return True
+    except Exception:
+        return False
+
 def run_chat(prompt: str, model_name: str, verbose: bool = False):
+    if not check_ollama():
+        print("\n[Error]: Ollama service is not running or unreachable.")
+        print("Please ensure Ollama is installed and running (e.g., run 'ollama serve' or check the tray icon).")
+        return
+
     client = ollama.Client(timeout=300.0)
     call_history = CallHistory()
     
+    # Check if model exists
+    try:
+        models = client.list()
+        model_names = [m.get('name') for m in models.get('models', [])]
+        if model_name not in model_names and f"{model_name}:latest" not in model_names:
+            print(f"\n[Warning]: Model '{model_name}' not found in Ollama.")
+            print(f"Available models: {', '.join(model_names[:5])}...")
+            print(f"Attempting to proceed anyway, but this may fail.")
+    except Exception:
+        pass
+
+    system_prompt = (
+        "You are an elite software engineer agent. Your goal is to provide deep, accurate analysis of the codebase. "
+        "Use your tools strategically: \n"
+        "1. Start by listing the directory structure if you are unsure of the project layout.\n"
+        "2. Use 'search_repository' (regex) for keyword searches.\n"
+        "3. Use semantic tools ('get_symbol_definition', 'extract_code_block') for precise symbol analysis—they are better than regex because they ignore comments and strings.\n"
+        "4. Always 'read_file' or 'extract_code_block' before making conclusions about logic.\n"
+        "5. Be concise but thorough in your final answer.\n"
+        "IMPORTANT: Do not repeat the same tool call with the same arguments if it failed or returned nothing."
+    )
+
     messages = [
-        {'role': 'system', 'content': 'You are an expert software engineer. Explore the codebase using tools. IMPORTANT: If you find a file via regex search, use extract_code_block or read_file to see the content. DO NOT repeat the same search multiple times if it returns the same results. Use semantic tools (tree-sitter) for deep analysis.'},
+        {'role': 'system', 'content': system_prompt},
         {'role': 'user', 'content': prompt}
     ]
     
