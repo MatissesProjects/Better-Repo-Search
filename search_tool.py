@@ -626,9 +626,10 @@ def run_chat(prompt: str, model_name: str, verbose: bool = False, max_turns: int
         "Use your tools strategically: \n"
         "1. Start by listing the directory structure if you are unsure of the project layout.\n"
         "2. Use 'search_repository' (regex) for keyword searches.\n"
-        "3. Use semantic tools ('get_symbol_definition', 'extract_code_block') for precise symbol analysis—they are better than regex because they ignore comments and strings.\n"
+        "3. Use semantic tools ('get_symbol_definition', 'extract_code_block') for precise symbol analysis.\n"
         "4. Always 'read_file' or 'extract_code_block' before making conclusions about logic.\n"
-        "5. Be concise but thorough in your final answer.\n"
+        "5. Be concise. If you are suggesting changes, ONLY provide the suggested diffs in a standard diff format. "
+        "Do not output full code blocks of existing files unless explicitly asked for the full content.\n"
         "6. If you are approaching your maximum number of turns, provide a summary of what you have found so far.\n"
         "IMPORTANT: Do not repeat the same tool call with the same arguments if it failed or returned nothing."
     )
@@ -677,7 +678,7 @@ def run_chat(prompt: str, model_name: str, verbose: bool = False, max_turns: int
                     if verbose:
                         if last_chunk_type != 'content':
                             print("\n[Content]: ", end="", flush=True)
-                    print(m['content'], end="", flush=True)
+                        print(m['content'], end="", flush=True)
                     full_msg['content'] += m['content']
                     last_chunk_type = 'content'
                     
@@ -704,6 +705,8 @@ def run_chat(prompt: str, model_name: str, verbose: bool = False, max_turns: int
                 if not full_msg.get('content') and not full_msg.get('thinking'):
                     if verbose:
                         print("(Empty response from model)")
+                if not verbose and full_msg.get('content'):
+                    print(full_msg['content'])
                 reached_limit = False
                 break
                 
