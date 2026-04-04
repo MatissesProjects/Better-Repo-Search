@@ -680,7 +680,12 @@ def run_chat(prompt: str, model_name: str, verbose: bool = False, max_turns: int
                     last_chunk_type = 'content'
                     
                 if m.get('tool_calls'):
-                    full_msg['tool_calls'] = m['tool_calls']
+                    # Convert ToolCall objects to dicts if they aren't already
+                    for tc in m['tool_calls']:
+                        if not isinstance(tc, dict):
+                            full_msg['tool_calls'].append(tc.model_dump())
+                        else:
+                            full_msg['tool_calls'].append(tc)
 
             if verbose:
                 print("\n")
