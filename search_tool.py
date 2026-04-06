@@ -33,6 +33,27 @@ try:
         'kt': Language(tskotlin.language()),
         'kts': Language(tskotlin.language())
     }
+    # Optional languages - add them if installed
+    try:
+        import tree_sitter_go as tsgo
+        LANGUAGES['go'] = Language(tsgo.language())
+    except ImportError: pass
+    
+    try:
+        import tree_sitter_rust as tsrust
+        LANGUAGES['rs'] = Language(tsrust.language())
+    except ImportError: pass
+
+    try:
+        import tree_sitter_c as tsc
+        LANGUAGES['c'] = Language(tsc.language())
+    except ImportError: pass
+
+    try:
+        import tree_sitter_cpp as tscpp
+        LANGUAGES['cpp'] = Language(tscpp.language())
+    except ImportError: pass
+    
     HAS_TREE_SITTER = True
 except ImportError:
     HAS_TREE_SITTER = False
@@ -65,7 +86,7 @@ def clone_github_repo(repo_url: str) -> str:
         raise e
 
 def search_repository(regex_pattern: str, file_extension: str = "", context_lines: int = 5) -> str:
-    r"""Searches the local repository for a specific regex pattern."""
+    r"""Searches the local repository for a specific regex pattern using grep."""
     target_directory = "." 
     command = ["grep", "-rnEI", f"-C{context_lines}", "--exclude-dir=.git", "--exclude-dir=__pycache__", "--exclude-dir=venv"]
     
@@ -76,8 +97,8 @@ def search_repository(regex_pattern: str, file_extension: str = "", context_line
     command.extend([regex_pattern, target_directory])
     
     try:
-        # We run the command and handle the output decoding manually to be more robust
-        result = subprocess.run(command, capture_output=True, check=False)
+        # Timeout to prevent hanging on massive repositories or infinite grep loops
+        result = subprocess.run(command, capture_output=True, check=False, timeout=60)
         
         # Decode with utf-8 and replacement for invalid characters
         stdout = result.stdout.decode('utf-8', errors='replace')
@@ -86,13 +107,22 @@ def search_repository(regex_pattern: str, file_extension: str = "", context_line
         if stdout:
             return stdout[:10000] + ("\n... [Truncated]" if len(stdout) > 10000 else "")
         elif stderr:
+            # Grep exit code 1 means no match, but sometimes stderr has warnings
             if result.returncode == 1 and not stderr:
                  return f"No matches found for: {regex_pattern}"
-            return f"Error: {stderr}"
+            
+            # Special handling for common grep errors
+            if "invalid regular expression" in stderr.lower():
+                return f"Error: Invalid regex pattern provided: '{regex_pattern}'"
+            return f"Error (Exit {result.returncode}): {stderr}"
         else:
+            if result.returncode == 1:
+                return f"No matches found for: {regex_pattern}"
             return f"No matches found for: {regex_pattern}"
+    except subprocess.TimeoutExpired:
+        return f"Error: Search timed out after 60 seconds for pattern: '{regex_pattern}'"
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error executing search: {str(e)}"
 
 def read_file(file_path: str, start_line: Optional[int] = None, end_line: Optional[int] = None) -> str:
     r"""Reads a file with optional line bounds."""
@@ -792,7 +822,7 @@ def run_chat(prompt: str, model_name: str, verbose: bool = False, max_turns: int
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("prompt", help="The prompt to send to the model.")
-    parser.add_argument("--model", default="qwen3.5:9b", help="The Ollama model to use.")
+    parser.add_argument("--model", default="gemma4:e4b", help="The Ollama model to use.")
     parser.add_argument("--repo", default=".", help="The path to the repository to search (default: current directory).")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show streamed thinking and detailed logs.")
     parser.add_argument("--attempts", default="low", help="Number of turns: 'low' (15), 'medium' (25), 'high' (35), or a custom number.")

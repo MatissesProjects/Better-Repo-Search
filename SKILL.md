@@ -15,7 +15,7 @@ This skill provides a high-powered, local-first alternative to standard regex se
 ### Usage Instructions
 To trigger this skill, use your shell execution tool to run the `search_tool.py` script. 
 
-**Note**: You must have [Ollama](https://ollama.com/) installed and running locally. The default model is `qwen3.5:9b`.
+**Note**: You must have [Ollama](https://ollama.com/) installed and running locally. The default model is `gemma4:e4b`.
 
 ```bash
 python <PATH_TO_SKILL_DIR>/search_tool.py "<USER_PROMPT>"

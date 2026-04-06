@@ -36,7 +36,7 @@ A powerful, local-first toolbelt that allows Large Language Models (LLMs) to exp
 2. **Ensure Ollama is Running**:
    Download and start [Ollama](https://ollama.com/), then pull your preferred model:
    ```bash
-   ollama pull qwen3.5:9b  # or qwen2.5-coder:7b
+   ollama pull gemma4:e4b  # or qwen2.5-coder:7b
    ```
 
 ## Verification and Testing
@@ -65,12 +65,12 @@ For deep semantic verification, you can run prompts against the `test_repo`:
 Run the tool by passing your natural language prompt and the target repository path (local or remote):
 
 ```bash
-./venv/Scripts/python search_tool.py "How is the user authentication handled in the backend?" --repo "https://github.com/example/repo" --model qwen3.5:9b
+./venv/Scripts/python search_tool.py "How is the user authentication handled in the backend?" --repo "https://github.com/example/repo" --model gemma4:e4b
 ```
 
 ### Options
 - `--repo`: The path to the repository you want to analyze. This can be a **local directory** or a **GitHub URL** (HTTPS/SSH). If a URL is provided, the tool clones the repository to a temporary folder and deletes it after the session. (Defaults to current directory).
-- `--model`: The Ollama model tag to use (defaults to `qwen3.5:9b`).
+- `--model`: The Ollama model tag to use (defaults to `gemma4:e4b`).
 
 ## Example Workflow
 
