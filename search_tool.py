@@ -443,6 +443,7 @@ def analyze_dependencies(file_path: str) -> str:
             (import_statement) @imp
             (export_statement) @imp
             (call_expression function: (identifier) @name (#eq? @name "require")) @imp
+            (import_expression) @imp
             """
         elif ext == 'html':
             query_str = """
@@ -455,6 +456,11 @@ def analyze_dependencies(file_path: str) -> str:
             query_str = "(import_declaration) @imp"
         elif ext in ['kt', 'kts']:
             query_str = "(import_header) @imp"
+        elif ext in ['c', 'cpp', 'h', 'hpp']:
+            query_str = """
+            (preproc_include) @imp
+            (using_declaration) @imp
+            """
             
         query = Query(lang, query_str)
         cursor = QueryCursor(query)
