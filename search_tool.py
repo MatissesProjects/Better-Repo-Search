@@ -714,22 +714,23 @@ class CallHistory:
 
 # --- Orchestration ---
 
-def check_ollama():
+def check_ollama(host: Optional[str] = None):
     """Checks if the Ollama service is running and accessible."""
     try:
-        client = ollama.Client(timeout=5.0)
+        client = ollama.Client(host=host, timeout=5.0)
         client.list()
         return True
     except Exception:
         return False
 
-def run_chat(prompt: str, model_name: str, verbose: bool = False, max_turns: int = 15):
-    if not check_ollama():
+def run_chat(prompt: str, model_name: str, verbose: bool = False, max_turns: int = 15, host: Optional[str] = None):
+    if not check_ollama(host=host):
         print("\n[Error]: Ollama service is not running or unreachable.")
+        print(f"Host: {host if host else 'Default'}")
         print("Please ensure Ollama is installed and running (e.g., run 'ollama serve' or check the tray icon).")
         return
 
-    client = ollama.Client(timeout=300.0)
+    client = ollama.Client(host=host, timeout=300.0)
     call_history = CallHistory()
     
     # Check if model exists
@@ -934,6 +935,7 @@ if __name__ == "__main__":
     parser.add_argument("prompt", help="The prompt to send to the model.")
     parser.add_argument("--model", default="gemma4:e4b", help="The Ollama model to use.")
     parser.add_argument("--repo", default=".", help="The path to the repository to search (default: current directory).")
+    parser.add_argument("--host", default=os.getenv("OLLAMA_HOST"), help="Ollama host URL (e.g., http://127.0.0.1:11434).")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show streamed thinking and detailed logs.")
     parser.add_argument("--attempts", default="low", help="Number of turns: 'low' (15), 'medium' (25), 'high' (35), or a custom number.")
     args = parser.parse_args()
@@ -966,7 +968,7 @@ if __name__ == "__main__":
                 print(f"Error: Repo path '{args.repo}' does not exist.")
                 sys.exit(1)
                 
-        run_chat(args.prompt, args.model, args.verbose, max_turns=max_turns)
+        run_chat(args.prompt, args.model, args.verbose, max_turns=max_turns, host=args.host)
     finally:
         os.chdir(original_cwd)
         if temp_repo_path and os.path.exists(temp_repo_path):
