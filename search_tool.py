@@ -12,49 +12,72 @@ from dotenv import load_dotenv
 import ollama
 
 # Tree-sitter imports
+HAS_TREE_SITTER = False
+LANGUAGES = {}
+
 try:
     from tree_sitter import Language, Parser, Query, QueryCursor
-    import tree_sitter_python as tspython
-    import tree_sitter_c_sharp as tscsharp
-    import tree_sitter_javascript as tsjavascript
-    import tree_sitter_typescript as tstypescript
-    import tree_sitter_html as tshtml
-    import tree_sitter_java as tsjava
-    import tree_sitter_kotlin as tskotlin
+    HAS_TREE_SITTER = True
     
-    LANGUAGES = {
-        'py': Language(tspython.language()),
-        'cs': Language(tscsharp.language()),
-        'js': Language(tsjavascript.language()),
-        'ts': Language(tstypescript.language_typescript()),
-        'tsx': Language(tstypescript.language_tsx()),
-        'html': Language(tshtml.language()),
-        'java': Language(tsjava.language()),
-        'kt': Language(tskotlin.language()),
-        'kts': Language(tskotlin.language())
-    }
-    # Optional languages - add them if installed
+    # Required/Core Languages
+    try:
+        import tree_sitter_python as tspython
+        LANGUAGES['py'] = tspython.language()
+    except ImportError: pass
+
+    try:
+        import tree_sitter_c_sharp as tscsharp
+        LANGUAGES['cs'] = tscsharp.language()
+    except ImportError: pass
+
+    try:
+        import tree_sitter_javascript as tsjavascript
+        LANGUAGES['js'] = tsjavascript.language()
+    except ImportError: pass
+
+    try:
+        import tree_sitter_typescript as tstypescript
+        LANGUAGES['ts'] = tstypescript.language_typescript()
+        LANGUAGES['tsx'] = tstypescript.language_tsx()
+    except ImportError: pass
+
+    try:
+        import tree_sitter_html as tshtml
+        LANGUAGES['html'] = tshtml.language()
+    except ImportError: pass
+
+    try:
+        import tree_sitter_java as tsjava
+        LANGUAGES['java'] = tsjava.language()
+    except ImportError: pass
+
+    try:
+        import tree_sitter_kotlin as tskotlin
+        LANGUAGES['kt'] = tskotlin.language()
+        LANGUAGES['kts'] = tskotlin.language()
+    except ImportError: pass
+    
+    # Optional Languages
     try:
         import tree_sitter_go as tsgo
-        LANGUAGES['go'] = Language(tsgo.language())
+        LANGUAGES['go'] = tsgo.language()
     except ImportError: pass
     
     try:
         import tree_sitter_rust as tsrust
-        LANGUAGES['rs'] = Language(tsrust.language())
+        LANGUAGES['rs'] = tsrust.language()
     except ImportError: pass
 
     try:
         import tree_sitter_c as tsc
-        LANGUAGES['c'] = Language(tsc.language())
+        LANGUAGES['c'] = tsc.language()
     except ImportError: pass
 
     try:
         import tree_sitter_cpp as tscpp
-        LANGUAGES['cpp'] = Language(tscpp.language())
+        LANGUAGES['cpp'] = tscpp.language()
     except ImportError: pass
-    
-    HAS_TREE_SITTER = True
+
 except ImportError:
     HAS_TREE_SITTER = False
 
@@ -77,12 +100,12 @@ def clone_github_repo(repo_url: str) -> str:
         return temp_dir
     except subprocess.CalledProcessError as e:
         if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, onerror=remove_readonly)
+            shutil.rmtree(temp_dir, onexc=remove_readonly)
         error_msg = e.stderr.decode('utf-8', errors='replace').strip()
         raise Exception(f"Failed to clone repository: {error_msg}")
     except Exception as e:
         if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, onerror=remove_readonly)
+            shutil.rmtree(temp_dir, onexc=remove_readonly)
         raise e
 
 def search_repository(regex_pattern: str, file_extension: str = "", context_lines: int = 5) -> str:
@@ -159,16 +182,16 @@ def get_file_symbols(file_path: str) -> str:
         if not os.path.exists(file_path): return "Error: File not found"
         
         ext = file_path.split('.')[-1]
+        query_str = ""
         
         # Try Tree-sitter first
         if HAS_TREE_SITTER and ext in LANGUAGES:
             lang = LANGUAGES[ext]
-            parser = Parser(lang)
+            parser = Parser(lang)  # type: ignore
             with open(file_path, 'rb') as f:
                 source = f.read()
             tree = parser.parse(source)
             
-            query_str = ""
             if ext == 'py':
                 query_str = """
                 (function_definition name: (identifier) @name) @symbol
@@ -213,8 +236,8 @@ def get_file_symbols(file_path: str) -> str:
                 """
             
             if query_str:
-                query = Query(lang, query_str)
-                cursor = QueryCursor(query)
+                query = Query(lang, query_str)  # type: ignore
+                cursor = QueryCursor(query)  # type: ignore
                 captures = cursor.captures(tree.root_node)
                 
                 results = []
@@ -279,7 +302,8 @@ def get_symbol_definition(file_path: str, symbol_name: str) -> str:
     if ext not in LANGUAGES: return f"Error: Language .{ext} not supported for semantic search."
     
     lang = LANGUAGES[ext]
-    parser = Parser(lang)
+    parser = Parser(lang)  # type: ignore
+    query_str = ""
     
     try:
         with open(file_path, 'rb') as f:
@@ -328,8 +352,9 @@ def get_symbol_definition(file_path: str, symbol_name: str) -> str:
             (object_declaration (identifier) @name (#eq? @name "{symbol_name}"))
             """
             
-        query = Query(lang, query_str)
-        cursor = QueryCursor(query)
+        if not query_str: return f"Error: get_symbol_definition not implemented for {ext} yet."
+        query = Query(lang, query_str)  # type: ignore
+        cursor = QueryCursor(query)  # type: ignore
         captures = cursor.captures(tree.root_node)
         
         results = []
@@ -350,7 +375,8 @@ def extract_code_block(file_path: str, symbol_name: str) -> str:
     if ext not in LANGUAGES: return f"Error: Language .{ext} not supported."
     
     lang = LANGUAGES[ext]
-    parser = Parser(lang)
+    parser = Parser(lang)  # type: ignore
+    query_str = ""
     
     try:
         with open(file_path, 'rb') as f:
@@ -401,8 +427,9 @@ def extract_code_block(file_path: str, symbol_name: str) -> str:
             (object_declaration (identifier) @name (#eq? @name "{symbol_name}")) @block
             """
             
-        query = Query(lang, query_str)
-        cursor = QueryCursor(query)
+        if not query_str: return f"Error: extract_code_block not implemented for {ext} yet."
+        query = Query(lang, query_str)  # type: ignore
+        cursor = QueryCursor(query)  # type: ignore
         captures = cursor.captures(tree.root_node)
         
         if 'block' in captures:
@@ -424,7 +451,8 @@ def analyze_dependencies(file_path: str) -> str:
     if ext not in LANGUAGES: return f"Error: Language .{ext} not supported."
     
     lang = LANGUAGES[ext]
-    parser = Parser(lang)
+    parser = Parser(lang)  # type: ignore
+    query_str = ""
     
     try:
         with open(file_path, 'rb') as f:
@@ -462,8 +490,9 @@ def analyze_dependencies(file_path: str) -> str:
             (using_declaration) @imp
             """
             
-        query = Query(lang, query_str)
-        cursor = QueryCursor(query)
+        if not query_str: return f"No explicit dependencies found for {ext}."
+        query = Query(lang, query_str)  # type: ignore
+        cursor = QueryCursor(query)  # type: ignore
         captures = cursor.captures(tree.root_node)
         
         results = []
@@ -548,7 +577,7 @@ def get_symbol_references(file_path: str, symbol_name: str) -> str:
     if ext not in LANGUAGES: return f"Error: Language .{ext} not supported for semantic search."
     
     lang = LANGUAGES[ext]
-    parser = Parser(lang)
+    parser = Parser(lang) # type: ignore
     
     try:
         with open(file_path, 'rb') as f:
@@ -581,9 +610,9 @@ def get_symbol_references(file_path: str, symbol_name: str) -> str:
             """
         else:
             return f"Error: get_symbol_references not fully implemented for {ext} yet."
-            
-        query = Query(lang, query_str)
-        cursor = QueryCursor(query)
+
+        query = Query(lang, query_str) # type: ignore
+        cursor = QueryCursor(query) # type: ignore
         captures = cursor.captures(tree.root_node)
         
         results = []
@@ -1059,4 +1088,4 @@ if __name__ == "__main__":
         if temp_repo_path and os.path.exists(temp_repo_path):
             if args.verbose:
                 print(f"--- Cleaning up temporary directory: {temp_repo_path} ---")
-            shutil.rmtree(temp_repo_path, onerror=remove_readonly)
+            shutil.rmtree(temp_repo_path, onexc=remove_readonly)

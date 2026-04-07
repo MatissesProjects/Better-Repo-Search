@@ -15,6 +15,9 @@ A powerful, local-first toolbelt that allows Large Language Models (LLMs) to exp
   - Kotlin (`.kt`, `.kts`)
   - JavaScript / TypeScript (`.js`, `.ts`, `.tsx`)
   - HTML (`.html`)
+  - Go (`.go`)
+  - Rust (`.rs`)
+  - C/C++ (`.c`, `.cpp`)
 
 ## Toolbelt Features
 
@@ -50,6 +53,9 @@ The repository includes a `test_repo/` directory containing sample code in all s
 - **HTML** (`sample.html`)
 - **Java** (`GameSession.java`)
 - **Kotlin** (`Warrior.kt`)
+- **Go** (`sample.go`)
+- **Rust** (`sample.rs`)
+- **C/C++** (`sample.c`, `sample.cpp`)
 
 ### Running Verification
 You can use `verify_tools.py` to check basic functionality:

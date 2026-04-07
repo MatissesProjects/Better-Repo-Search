@@ -8,3 +8,7 @@ tree-sitter-typescript
 tree-sitter-html
 tree-sitter-java
 tree-sitter-kotlin
+tree-sitter-go
+tree-sitter-rust
+tree-sitter-c
+tree-sitter-cpp
