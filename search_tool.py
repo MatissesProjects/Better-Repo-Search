@@ -22,61 +22,61 @@ try:
     # Required/Core Languages
     try:
         import tree_sitter_python as tspython
-        LANGUAGES['py'] = tspython.language()
-    except ImportError: pass
+        LANGUAGES['py'] = Language(tspython.language())
+    except (ImportError, AttributeError): pass
 
     try:
         import tree_sitter_c_sharp as tscsharp
-        LANGUAGES['cs'] = tscsharp.language()
-    except ImportError: pass
+        LANGUAGES['cs'] = Language(tscsharp.language())
+    except (ImportError, AttributeError): pass
 
     try:
         import tree_sitter_javascript as tsjavascript
-        LANGUAGES['js'] = tsjavascript.language()
-    except ImportError: pass
+        LANGUAGES['js'] = Language(tsjavascript.language())
+    except (ImportError, AttributeError): pass
 
     try:
         import tree_sitter_typescript as tstypescript
-        LANGUAGES['ts'] = tstypescript.language_typescript()
-        LANGUAGES['tsx'] = tstypescript.language_tsx()
-    except ImportError: pass
+        LANGUAGES['ts'] = Language(tstypescript.language_typescript())
+        LANGUAGES['tsx'] = Language(tstypescript.language_tsx())
+    except (ImportError, AttributeError): pass
 
     try:
         import tree_sitter_html as tshtml
-        LANGUAGES['html'] = tshtml.language()
-    except ImportError: pass
+        LANGUAGES['html'] = Language(tshtml.language())
+    except (ImportError, AttributeError): pass
 
     try:
         import tree_sitter_java as tsjava
-        LANGUAGES['java'] = tsjava.language()
-    except ImportError: pass
+        LANGUAGES['java'] = Language(tsjava.language())
+    except (ImportError, AttributeError): pass
 
     try:
         import tree_sitter_kotlin as tskotlin
-        LANGUAGES['kt'] = tskotlin.language()
-        LANGUAGES['kts'] = tskotlin.language()
-    except ImportError: pass
+        LANGUAGES['kt'] = Language(tskotlin.language())
+        LANGUAGES['kts'] = Language(tskotlin.language())
+    except (ImportError, AttributeError): pass
     
     # Optional Languages
     try:
         import tree_sitter_go as tsgo
-        LANGUAGES['go'] = tsgo.language()
-    except ImportError: pass
+        LANGUAGES['go'] = Language(tsgo.language())
+    except (ImportError, AttributeError): pass
     
     try:
         import tree_sitter_rust as tsrust
-        LANGUAGES['rs'] = tsrust.language()
-    except ImportError: pass
+        LANGUAGES['rs'] = Language(tsrust.language())
+    except (ImportError, AttributeError): pass
 
     try:
         import tree_sitter_c as tsc
-        LANGUAGES['c'] = tsc.language()
-    except ImportError: pass
+        LANGUAGES['c'] = Language(tsc.language())
+    except (ImportError, AttributeError): pass
 
     try:
         import tree_sitter_cpp as tscpp
-        LANGUAGES['cpp'] = tscpp.language()
-    except ImportError: pass
+        LANGUAGES['cpp'] = Language(tscpp.language())
+    except (ImportError, AttributeError): pass
 
 except ImportError:
     HAS_TREE_SITTER = False
@@ -918,8 +918,8 @@ class CallHistory:
         count = self.msg_history.count(sig_str)
         self.msg_history.append(sig_str)
         
-        # If we see the same result twice (count=1), we warn. If 3 times (count=2), we break.
-        return count >= 2
+        # If we see the same result 3 times (count=2), we break.
+        return count >= 3
 
 # --- Orchestration ---
 
