@@ -234,6 +234,33 @@ def get_file_symbols(file_path: str) -> str:
                 (start_tag (tag_name) @name) @symbol
                 (erroneous_end_tag (tag_name) @name) @symbol
                 """
+            elif ext == 'go':
+                query_str = """
+                (function_declaration name: (identifier) @name) @symbol
+                (method_declaration name: (field_identifier) @name) @symbol
+                (type_spec name: (type_identifier) @name) @symbol
+                """
+            elif ext == 'rs':
+                query_str = """
+                (function_item name: (identifier) @name) @symbol
+                (struct_item name: (type_identifier) @name) @symbol
+                (enum_item name: (type_identifier) @name) @symbol
+                (trait_item name: (type_identifier) @name) @symbol
+                (impl_item (function_item name: (identifier) @name)) @symbol
+                """
+            elif ext == 'c':
+                query_str = """
+                (function_definition declarator: (function_declarator declarator: (identifier) @name)) @symbol
+                (struct_specifier name: (type_identifier) @name) @symbol
+                (type_definition declarator: (type_identifier) @name) @symbol
+                """
+            elif ext == 'cpp':
+                query_str = """
+                (function_definition declarator: (function_declarator declarator: (identifier) @name)) @symbol
+                (class_specifier name: (type_identifier) @name) @symbol
+                (struct_specifier name: (type_identifier) @name) @symbol
+                (function_definition declarator: (function_declarator declarator: (field_identifier) @name)) @symbol
+                """
             
             if query_str:
                 query = Query(lang, query_str)  # type: ignore
@@ -351,6 +378,31 @@ def get_symbol_definition(file_path: str, symbol_name: str) -> str:
             (class_declaration (identifier) @name (#eq? @name "{symbol_name}"))
             (object_declaration (identifier) @name (#eq? @name "{symbol_name}"))
             """
+        elif ext == 'go':
+            query_str = f"""
+            (function_declaration name: (identifier) @name (#eq? @name "{symbol_name}"))
+            (method_declaration name: (field_identifier) @name (#eq? @name "{symbol_name}"))
+            (type_spec name: (type_identifier) @name (#eq? @name "{symbol_name}"))
+            """
+        elif ext == 'rs':
+            query_str = f"""
+            (function_item name: (identifier) @name (#eq? @name "{symbol_name}"))
+            (struct_item name: (type_identifier) @name (#eq? @name "{symbol_name}"))
+            (enum_item name: (type_identifier) @name (#eq? @name "{symbol_name}"))
+            (trait_item name: (type_identifier) @name (#eq? @name "{symbol_name}"))
+            """
+        elif ext == 'c':
+            query_str = f"""
+            (function_definition declarator: (function_declarator declarator: (identifier) @name (#eq? @name "{symbol_name}")))
+            (struct_specifier name: (type_identifier) @name (#eq? @name "{symbol_name}"))
+            """
+        elif ext == 'cpp':
+            query_str = f"""
+            (function_definition declarator: (function_declarator declarator: (identifier) @name (#eq? @name "{symbol_name}")))
+            (class_specifier name: (type_identifier) @name (#eq? @name "{symbol_name}"))
+            (struct_specifier name: (type_identifier) @name (#eq? @name "{symbol_name}"))
+            (function_definition declarator: (function_declarator declarator: (field_identifier) @name (#eq? @name "{symbol_name}")))
+            """
             
         if not query_str: return f"Error: get_symbol_definition not implemented for {ext} yet."
         query = Query(lang, query_str)  # type: ignore
@@ -426,6 +478,32 @@ def extract_code_block(file_path: str, symbol_name: str) -> str:
             (class_declaration (identifier) @name (#eq? @name "{symbol_name}")) @block
             (object_declaration (identifier) @name (#eq? @name "{symbol_name}")) @block
             """
+        elif ext == 'go':
+            query_str = f"""
+            (function_declaration name: (identifier) @name (#eq? @name "{symbol_name}")) @block
+            (method_declaration name: (field_identifier) @name (#eq? @name "{symbol_name}")) @block
+            (type_spec name: (type_identifier) @name (#eq? @name "{symbol_name}")) @block
+            """
+        elif ext == 'rs':
+            query_str = f"""
+            (function_item name: (identifier) @name (#eq? @name "{symbol_name}")) @block
+            (struct_item name: (type_identifier) @name (#eq? @name "{symbol_name}")) @block
+            (enum_item name: (type_identifier) @name (#eq? @name "{symbol_name}")) @block
+            (trait_item name: (type_identifier) @name (#eq? @name "{symbol_name}")) @block
+            (impl_item (function_item name: (identifier) @name (#eq? @name "{symbol_name}"))) @block
+            """
+        elif ext == 'c':
+            query_str = f"""
+            (function_definition declarator: (function_declarator declarator: (identifier) @name (#eq? @name "{symbol_name}"))) @block
+            (struct_specifier name: (type_identifier) @name (#eq? @name "{symbol_name}")) @block
+            """
+        elif ext == 'cpp':
+            query_str = f"""
+            (function_definition declarator: (function_declarator declarator: (identifier) @name (#eq? @name "{symbol_name}"))) @block
+            (class_specifier name: (type_identifier) @name (#eq? @name "{symbol_name}")) @block
+            (struct_specifier name: (type_identifier) @name (#eq? @name "{symbol_name}")) @block
+            (function_definition declarator: (function_declarator declarator: (field_identifier) @name (#eq? @name "{symbol_name}"))) @block
+            """
             
         if not query_str: return f"Error: extract_code_block not implemented for {ext} yet."
         query = Query(lang, query_str)  # type: ignore
@@ -484,6 +562,13 @@ def analyze_dependencies(file_path: str) -> str:
             query_str = "(import_declaration) @imp"
         elif ext in ['kt', 'kts']:
             query_str = "(import_header) @imp"
+        elif ext == 'go':
+            query_str = "(import_declaration) @imp"
+        elif ext == 'rs':
+            query_str = """
+            (use_declaration) @imp
+            (extern_crate_declaration) @imp
+            """
         elif ext in ['c', 'cpp', 'h', 'hpp']:
             query_str = """
             (preproc_include) @imp
@@ -608,6 +693,21 @@ def get_symbol_references(file_path: str, symbol_name: str) -> str:
             (call_expression (identifier) @name (#eq? @name "{symbol_name}"))
             (call_expression (navigation_expression (identifier) @name (#eq? @name "{symbol_name}")))
             """
+        elif ext == 'go':
+            query_str = f"""
+            (call_expression function: (identifier) @name (#eq? @name "{symbol_name}"))
+            (call_expression function: (selector_expression field: (field_identifier) @name (#eq? @name "{symbol_name}")))
+            """
+        elif ext == 'rs':
+            query_str = f"""
+            (call_expression function: (identifier) @name (#eq? @name "{symbol_name}"))
+            (call_expression function: (field_expression field: (field_identifier) @name (#eq? @name "{symbol_name}")))
+            """
+        elif ext in ['c', 'cpp']:
+            query_str = f"""
+            (call_expression function: (identifier) @name (#eq? @name "{symbol_name}"))
+            (call_expression function: (field_expression field: (field_identifier) @name (#eq? @name "{symbol_name}")))
+            """
         else:
             return f"Error: get_symbol_references not fully implemented for {ext} yet."
 
@@ -709,7 +809,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'get_symbol_definition',
-            'description': 'Semantic search: find exact declaration of class/method (Supports py, cs, js, ts, html, java, kt).',
+            'description': 'Semantic search: find exact declaration of class/method (Supports py, cs, js, ts, html, java, kt, go, rs, c, cpp).',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -724,7 +824,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'get_symbol_references',
-            'description': 'Semantic search: find all call sites/references of a symbol in a file (Supports py, cs, js, ts, java, kt).',
+            'description': 'Semantic search: find all call sites/references of a symbol in a file (Supports py, cs, js, ts, java, kt, go, rs, c, cpp).',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -739,7 +839,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'extract_code_block',
-            'description': 'Semantic search: get the full code body for a symbol (Supports py, cs, js, ts, html, java, kt).',
+            'description': 'Semantic search: get the full code body for a symbol (Supports py, cs, js, ts, html, java, kt, go, rs, c, cpp).',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -754,7 +854,7 @@ tools = [
         'type': 'function',
         'function': {
             'name': 'analyze_dependencies',
-            'description': 'Extract all imports/directives from a file (Supports py, cs, js, ts, html, java, kt).',
+            'description': 'Extract all imports/directives from a file (Supports py, cs, js, ts, html, java, kt, go, rs, c, cpp).',
             'parameters': {
                 'type': 'object',
                 'properties': {
