@@ -997,11 +997,33 @@ def run_chat(prompt: str, model_name: str, verbose: bool = False, max_turns: int
     
     # Check if model exists
     try:
-        models = client.list()
-        model_names = [m.get('name') for m in models.get('models', [])]
+        models_resp = client.list()
+        # Handle both old dict-style and new object-style responses
+        if hasattr(models_resp, 'models'):
+            models_list = models_resp.models
+        elif isinstance(models_resp, dict):
+            models_list = models_resp.get('models', [])
+        else:
+            models_list = []
+
+        model_names = []
+        for m in models_list:
+            # Each 'm' could be a dict or an object
+            name = None
+            if hasattr(m, 'get'):
+                name = m.get('name') or m.get('model')
+            if not name and hasattr(m, 'name'):
+                name = m.name
+            if not name and hasattr(m, 'model'):
+                name = m.model
+            
+            if name:
+                model_names.append(name)
+
         if model_name not in model_names and f"{model_name}:latest" not in model_names:
             print(f"\n[Warning]: Model '{model_name}' not found in Ollama.")
-            print(f"Available models: {', '.join(model_names[:5])}...")
+            if model_names:
+                print(f"Available models: {', '.join(model_names[:5])}...")
             print(f"Attempting to proceed anyway, but this may fail.")
     except Exception:
         pass
